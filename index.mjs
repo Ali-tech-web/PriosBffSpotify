@@ -3,19 +3,20 @@ import axios from 'axios';
 import  session from 'express-session'
 import { stringify } from 'querystring';
 import { config } from 'dotenv';
+import cors from 'cors'
 
 
 config();
 const port = process.env.PORT || 3000;
 const app = express();
 
+app.use(cors())
 app.use(session({
   secret: 'add-a-random-key-for-session',
   resave: false,
   saveUninitialized: true
 }));
 
-// TODO: We might need the clientId and token from user
 //constants
 const CLIENT_ID  =  process.env.CLIENT_ID
 const CLIENT_SECRET = process.env.CLIENT_SECRET
@@ -23,6 +24,7 @@ const REDIRECT_URI = process.env.REDIRECT_URI
 const AUTH_URL = process.env.AUTH_URL 
 const TOKEN_URL = process.env.TOKEN_URL 
 const API_BASE_URL = process.env.API_BASE_URL
+const FRONTEND_CLIENT_BASE_URL = process.env.FRONTEND_CLIENT_BASE_URL
 
 
 app.use((err, req, res, next) => {
@@ -50,7 +52,9 @@ app.get('/authenticate', (req, res) => {
   }
   const encodedParams = stringify(params);
   const auth_url = `${AUTH_URL}?${encodedParams}`
-  return res.redirect(auth_url)
+  return res.json({
+    auth_url: auth_url
+  })
 })
 
 app.get('/callback', async (req, res) => {
@@ -71,7 +75,7 @@ app.get('/callback', async (req, res) => {
       session.access_token = access_token
       session.refresh_token = refresh_token
       session.expires_at =  new Date().getTime() + expires_in
-      return res.redirect('/playlists')
+      return res.redirect(`${FRONTEND_CLIENT_BASE_URL}/spot/dashboard`)
     
     } catch (err) {
       res.status(500).send(`Error in making request to spotify api : ${err}`)
@@ -79,31 +83,23 @@ app.get('/callback', async (req, res) => {
   }
 })
 
-// Fetches all the playlists using access token, refresh token and session
-app.get('/playlists', async (req, res) => {
+app.get('/getAccessToken', (req, res) => {
   if (!session.access_token){
     return res.redirect('/authenticate')
   }
+
   if (new Date().getTime() > session['expires_at']){
-    console.log('Print the token expired, refreshing')
     return res.redirect('/refresh-token')
   }
-
-  try {
-    const config = {
-      method: 'GET',
-      headers: {
-        'Authorization' : `Bearer ${session.access_token}`,
-      },
-      url: API_BASE_URL + 'me/playlists'
-    }
-    const playlistResponse = await axios(config)
-    return res.json(playlistResponse.data)
-
-  } catch (err) {
-    return res.status(500).send("Error in fetching playlist data")
-  }
+  
+  return res.json({
+    accessToken : session['access_token'],
+    expiresAt: session['expires_at'],
+    expiresIn: session['expires_in'],
+    refreshToken: session['refresh_token']
+  })
 })
+
 
 app.get('/refresh-token', async (req, res) => {
   if (!session.refresh_token){
@@ -111,7 +107,6 @@ app.get('/refresh-token', async (req, res) => {
   }
   try {
     if (new Date().getTime() > session['expires_at']){
-      console.log('About to refresh : ')
       const req_body = {
         'grant_type': 'refresh_token', 
         'refresh_token': session.refresh_token,
@@ -121,27 +116,14 @@ app.get('/refresh-token', async (req, res) => {
       const response = await axios.post(TOKEN_URL, req_body, { headers: { 'Content-Type': 'application/x-www-form-urlencoded' } });
       session.access_token = response.data.access_token
       session.expires_at =  new Date().getTime() +  response.data.expires_in
-    
-      return res.redirect('/playlists')
+      
+      return res.redirect('/getAccessToken')
     }
   } catch(err) {
     res.status(500).send(`Error in refreshing the token ${err}`)
 
   }
 })
-
-
-
-
-// // Define a route for a different path
-// app.get('/about', (req, res) => {
-//   res.send('About page.');
-// });
-
-// // Define a route with dynamic content
-// app.get('/user/:id', (req, res) => {
-//   res.send(`User ID: ${req.params.id}`);
-// });
 
 // Start the server
 app.listen(port, () => {
