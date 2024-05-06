@@ -12,12 +12,13 @@ const app = express();
 
 app.use(cors())
 app.use(session({
-  secret: 'add-a-random-key-for-session',
+  secret: 'add-a-random-key-for-session-211',
   resave: false,
   saveUninitialized: true
 }));
 
-//constants
+
+// constants
 const CLIENT_ID  =  process.env.CLIENT_ID
 const CLIENT_SECRET = process.env.CLIENT_SECRET
 const REDIRECT_URI = process.env.REDIRECT_URI 
@@ -74,7 +75,7 @@ app.get('/callback', async (req, res) => {
       const { access_token, refresh_token, expires_in } = response.data;
       session.access_token = access_token
       session.refresh_token = refresh_token
-      session.expires_at =  new Date().getTime() + expires_in
+      session['expires_at'] =  new Date().getTime() + expires_in
       return res.redirect(`${FRONTEND_CLIENT_BASE_URL}/spot/dashboard`)
     
     } catch (err) {
@@ -89,7 +90,7 @@ app.get('/getAccessToken', (req, res) => {
   }
 
   if (new Date().getTime() > session['expires_at']){
-    return res.redirect('/refresh-token')
+     return res.redirect('/refresh-token')
   }
   
   return res.json({
@@ -115,7 +116,7 @@ app.get('/refresh-token', async (req, res) => {
       }
       const response = await axios.post(TOKEN_URL, req_body, { headers: { 'Content-Type': 'application/x-www-form-urlencoded' } });
       session.access_token = response.data.access_token
-      session.expires_at =  new Date().getTime() +  response.data.expires_in
+      session['expires_at'] =  new Date().getTime() +  (response.data.expires_in * 1000)    
       
       return res.redirect('/getAccessToken')
     }
